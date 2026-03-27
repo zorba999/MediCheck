@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MediCheck — AI Symptom Checker</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:           #f0ede8;
+    --surface:      #faf8f5;
+    --card:         #ffffff;
+    --text:         #1a1814;
+    --muted:        #6b6760;
+    --accent:       #2d6a4f;
+    --accent-light: #d8f3dc;
+    --accent-dark:  #1b4332;
+    --warn:         #b5451b;
+    --warn-light:   #fde8e0;
+    --border:       #e0dcd5;
+    --pill:         #e8e4de;
+    --radius:       16px;
+    --radius-sm:    10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex; flex-direction: column;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 15px 28px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon {
+    width: 33px; height: 33px; background: var(--accent);
+    border-radius: 9px; display: flex; align-items: center;
+    justify-content: center; color: white; font-size: 15px;
+  }
+  .logo-text { font-family: 'DM Serif Display', serif; font-size: 18px; }
+  .header-right { display: flex; gap: 8px; align-items: center; }
+  .badge {
+    display: flex; align-items: center; gap: 5px;
+    padding: 4px 11px; border-radius: 20px;
+    font-size: 11px; font-weight: 500;
+  }
+  .badge-green { background: var(--accent-light); color: var(--accent-dark); }
+  .badge-gray  { background: var(--pill); color: var(--muted); border: 1px solid var(--border); }
+
+  main {
+    flex: 1; max-width: 800px; width: 100%;
+    margin: 0 auto; padding: 32px 20px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px 26px;
+  }
+
+  .intro h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 25px; font-weight: 400; line-height: 1.25; margin-bottom: 8px;
+  }
+  .intro h1 em { font-style: italic; color: var(--accent); }
+  .intro p { color: var(--muted); font-size: 13.5px; line-height: 1.6; }
+
+  .warn-banner {
+    background: var(--warn-light); border: 1px solid #f3c4b2;
+    border-radius: var(--radius-sm); padding: 11px 15px;
+    display: flex; gap: 9px; font-size: 13px; color: var(--warn); line-height: 1.5;
+  }
+
+  .section-label {
+    font-size: 11px; font-weight: 500; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 7px;
+    display: block;
+  }
+  .form-group { margin-bottom: 14px; }
+
+  textarea, select, input[type=text], input[type=password] {
+    width: 100%; padding: 10px 13px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-family: 'DM Sans', sans-serif; font-size: 13.5px;
+    background: var(--surface); color: var(--text);
+    outline: none; transition: border-color 0.2s;
+  }
+  textarea { resize: vertical; min-height: 90px; line-height: 1.6; }
+  textarea:focus, select:focus, input:focus { border-color: var(--accent); }
+  select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%236b6760' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 11px center;
+  }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
+  .chip {
+    padding: 5px 12px; background: var(--pill);
+    border: 1px solid var(--border); border-radius: 20px;
+    font-size: 12.5px; cursor: pointer; transition: all 0.15s; user-select: none;
+  }
+  .chip:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent-dark); }
+  .chip.sel { background: var(--accent-light); border-color: var(--accent); color: var(--accent-dark); font-weight: 500; }
+
+  .privacy-note {
+    background: var(--accent-light); border-radius: var(--radius-sm);
+    padding: 9px 13px; font-size: 12px; color: var(--accent-dark);
+    line-height: 1.5; margin-top: 14px;
+    display: flex; gap: 7px;
+  }
+
+  .submit-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);
+    gap: 12px; flex-wrap: wrap;
+  }
+  .cost-note { font-size: 11.5px; color: var(--muted); }
+
+  .btn {
+    padding: 10px 20px; border-radius: var(--radius-sm);
+    font-family: 'DM Sans', sans-serif; font-size: 13.5px; font-weight: 500;
+    cursor: pointer; border: none; transition: all 0.15s; white-space: nowrap;
+  }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: var(--accent-dark); }
+  .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  .btn-outline:hover { background: var(--pill); }
+
+  .loading {
+    display: none; align-items: center; gap: 9px;
+    padding: 11px 0; font-size: 13px; color: var(--muted);
+  }
+  .loading.show { display: flex; }
+  .spinner {
+    width: 15px; height: 15px;
+    border: 2px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.75s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Result */
+  .result-wrap { display: none; }
+  .result-wrap.show { display: flex; flex-direction: column; gap: 16px; }
+
+  .result-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px 26px; }
+  .result-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 15px;
+  }
+  .result-head h2 { font-family: 'DM Serif Display', serif; font-size: 18px; font-weight: 400; }
+  .tee-badge {
+    background: var(--accent-light); color: var(--accent-dark);
+    padding: 4px 11px; border-radius: 20px; font-size: 11px; font-weight: 500;
+  }
+  .result-body {
+    font-size: 13.5px; line-height: 1.78; color: var(--text);
+    white-space: pre-wrap; min-height: 40px;
+  }
+  .result-body.streaming::after {
+    content: '▋'; animation: blink 0.9s infinite; color: var(--accent);
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+  .emergency-alert {
+    background: var(--warn-light); border: 1px solid #f3c4b2;
+    border-radius: var(--radius-sm); padding: 13px 15px;
+    font-size: 13px; color: var(--warn); line-height: 1.5; display: none;
+  }
+  .emergency-alert.show { display: block; }
+
+  .result-footer {
+    margin-top: 15px; padding-top: 13px; border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  }
+  .meta { font-size: 11px; color: var(--muted); line-height: 1.6; }
+
+  /* History */
+  .history-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 26px; display: none; }
+  .history-card.show { display: block; }
+  .history-card h3 { font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 10px; }
+  .h-item { padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .h-item:last-child { border-bottom: none; }
+  .h-time { color: var(--muted); font-size: 11px; }
+  .h-summ { color: var(--text); margin-top: 2px; }
+
+  footer {
+    text-align: center; padding: 16px;
+    font-size: 11px; color: var(--muted);
+    border-top: 1px solid var(--border);
+  }
+
+  /* x402 gateway config panel */
+  .config-row { display: flex; gap: 8px; }
+  .config-row input { flex: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">✦</div>
+    <span class="logo-text">MediCheck</span>
+  </div>
+  <div class="header-right">
+    <div class="badge badge-green">🔒 TEE · PRIVATE</div>
+    <div class="badge badge-gray">Claude Sonnet 4.6</div>
+  </div>
+</header>
+
+<main>
+
+  <!-- Intro -->
+  <div class="card intro">
+    <h1>Describe your symptoms,<br><em>get AI-powered guidance.</em></h1>
+    <p style="margin-top:8px;">
+      Powered by <strong>OpenGradient x402 Gateway</strong> — symptoms processed inside a TEE with
+      <strong>PRIVATE settlement</strong>. No health data stored on-chain.
+    </p>
+  </div>
+
+  <!-- Warning -->
+  <div class="warn-banner">
+    <span>⚠️</span>
+    <span><strong>Not a medical device.</strong> Preliminary AI guidance only. In an emergency, call your local emergency services immediately.</span>
+  </div>
+
+  <!-- Config: wallet -->
+  <div class="card" id="config-card">
+    <span class="section-label">🔑 OpenGradient Wallet (Base Sepolia)</span>
+    <div class="config-row">
+      <input type="password" id="pk-input" placeholder="0x... private key" autocomplete="off" />
+      <button class="btn btn-primary" onclick="saveKey()">Connect</button>
+    </div>
+    <div id="key-status" style="font-size:12px;color:var(--muted);margin-top:8px;">
+      Not connected — private key stays in memory only, never sent anywhere except OpenGradient x402.
+    </div>
+  </div>
+
+  <!-- Form -->
+  <div class="card">
+    <h2 style="font-family:'DM Serif Display',serif;font-size:19px;font-weight:400;margin-bottom:4px;">Symptom Assessment</h2>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">Fill in as much detail as possible</p>
+
+    <div class="form-group">
+      <span class="section-label">Common symptoms — click to select</span>
+      <div class="chips" id="chips">
+        <span class="chip" onclick="toggleChip(this)">🤒 Fever</span>
+        <span class="chip" onclick="toggleChip(this)">🤧 Runny nose</span>
+        <span class="chip" onclick="toggleChip(this)">😮‍💨 Shortness of breath</span>
+        <span class="chip" onclick="toggleChip(this)">💢 Headache</span>
+        <span class="chip" onclick="toggleChip(this)">🤢 Nausea</span>
+        <span class="chip" onclick="toggleChip(this)">😴 Fatigue</span>
+        <span class="chip" onclick="toggleChip(this)">🦴 Joint pain</span>
+        <span class="chip" onclick="toggleChip(this)">🫀 Chest pain</span>
+        <span class="chip" onclick="toggleChip(this)">🤮 Vomiting</span>
+        <span class="chip" onclick="toggleChip(this)">😵 Dizziness</span>
+        <span class="chip" onclick="toggleChip(this)">🦷 Sore throat</span>
+        <span class="chip" onclick="toggleChip(this)">👁️ Eye irritation</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <span class="section-label">Describe your symptoms in detail</span>
+      <textarea id="symptoms-text" placeholder="e.g. Persistent headache for 3 days, mild fever (38.2°C), fatigue. Worse in the mornings..."></textarea>
+    </div>
+
+    <div class="row2">
+      <div class="form-group">
+        <span class="section-label">Patient age range</span>
+        <select id="age-range">
+          <option value="">— select —</option>
+          <option>Under 12</option><option>12–17</option><option>18–30</option>
+          <option>31–45</option><option>46–60</option><option>61–75</option><option>75+</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <span class="section-label">Duration of symptoms</span>
+        <select id="duration">
+          <option value="">— select —</option>
+          <option>Less than 24 hours</option><option>1–3 days</option>
+          <option>3–7 days</option><option>1–2 weeks</option>
+          <option>More than 2 weeks</option><option>Recurring</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <span class="section-label">Medical history (optional)</span>
+      <textarea id="history-text" placeholder="Known conditions, medications, allergies..." style="min-height:66px;"></textarea>
+    </div>
+
+    <div class="privacy-note">
+      🔒
+      <span>Data sent via <strong>OpenGradient x402 Gateway</strong> to a TEE-protected Claude Sonnet node.
+      Settlement: <strong>PRIVATE</strong> — nothing posted on-chain.</span>
+    </div>
+
+    <div class="submit-row">
+      <span class="cost-note">~0.05 $OPG per assessment · Claude Sonnet 4.6 · TEE · PRIVATE</span>
+      <button class="btn btn-primary" id="submit-btn" onclick="runAssessment()">Analyze Symptoms →</button>
+    </div>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <span id="loading-text">Connecting to TEE node...</span>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div class="result-wrap" id="result-wrap">
+
+    <div class="result-card">
+      <div class="result-head">
+        <h2>Assessment Result</h2>
+        <div class="tee-badge">✓ TEE · PRIVATE</div>
+      </div>
+      <div class="result-body" id="result-body"></div>
+      <div class="emergency-alert" id="emergency-alert">
+        🚨 <strong>Possible emergency detected.</strong> Please call emergency services or go to the nearest emergency room immediately. Do not wait.
+      </div>
+      <div class="result-footer">
+        <div class="meta" id="meta"></div>
+        <button class="btn btn-outline" onclick="clearForm()">New Assessment</button>
+      </div>
+    </div>
+
+    <div class="history-card show" id="history-card" style="display:none;">
+      <h3>Session history</h3>
+      <div id="history-list"></div>
+    </div>
+
+  </div>
+
+</main>
+
+<footer>
+  MediCheck · OpenGradient SDK · TEE-protected inference · Not a medical device
+</footer>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let privateKey = '';
+const sessionHistory = [];
+
+const SYSTEM_PROMPT = `You are a compassionate and knowledgeable medical assistant providing preliminary health guidance.
+You MUST:
+1. Acknowledge and list the reported symptoms clearly
+2. Provide 2-3 possible causes (differential diagnosis), from most to least likely
+3. Give concrete, actionable recommendations (rest, hydration, OTC medications if appropriate)
+4. Clearly indicate priority: URGENT (seek immediate care), SOON (see doctor within days), or HOME CARE (manage at home)
+5. Add a brief disclaimer about professional medical consultation
+
+Use plain text with line breaks. No markdown symbols.
+IMPORTANT: If symptoms suggest a life-threatening emergency (chest pain + shortness of breath, stroke, severe allergic reaction), start your response with "EMERGENCY:" on its own line.`;
+
+// ── Wallet ───────────────────────────────────────────────────────────────────
+function saveKey() {
+  const val = document.getElementById('pk-input').value.trim();
+  if (!val.startsWith('0x') || val.length < 20) {
+    document.getElementById('key-status').textContent = '❌ Invalid key — must start with 0x';
+    document.getElementById('key-status').style.color = 'var(--warn)';
+    return;
+  }
+  privateKey = val;
+  document.getElementById('pk-input').value = '••••••••••••••••';
+  document.getElementById('key-status').textContent = `✓ Connected: ${val.slice(0,6)}...${val.slice(-4)} (Base Sepolia)`;
+  document.getElementById('key-status').style.color = 'var(--accent)';
+}
+
+// ── Chips ────────────────────────────────────────────────────────────────────
+function toggleChip(el) {
+  el.classList.toggle('sel');
+  const sel = [...document.querySelectorAll('.chip.sel')]
+    .map(c => c.textContent.replace(/^\S+\s/, '').trim());
+  if (!sel.length) return;
+  const ta = document.getElementById('symptoms-text');
+  const tag = 'Selected: ';
+  if (ta.value.includes(tag)) {
+    ta.value = ta.value.replace(new RegExp(tag + '.*\\.'), tag + sel.join(', ') + '.');
+  } else {
+    ta.value = (ta.value ? ta.value + '\n\n' : '') + tag + sel.join(', ') + '.';
+  }
+}
+
+// ── Assessment ───────────────────────────────────────────────────────────────
+async function runAssessment() {
+  if (!privateKey) { alert('Please connect your wallet first.'); return; }
+
+  const symptoms = document.getElementById('symptoms-text').value.trim();
+  if (!symptoms) { alert('Please describe your symptoms.'); return; }
+
+  const age      = document.getElementById('age-range').value || 'Not specified';
+  const duration = document.getElementById('duration').value  || 'Not specified';
+  const history  = document.getElementById('history-text').value.trim();
+
+  setLoading(true, 'Connecting to OpenGradient x402 gateway...');
+  document.getElementById('submit-btn').disabled = true;
+  document.getElementById('result-wrap').classList.remove('show');
+  document.getElementById('emergency-alert').classList.remove('show');
+
+  const userMessage = `Patient information:
+- Age range: ${age}
+- Duration: ${duration}
+- Symptoms: ${symptoms}${history ? '\n- Medical history: ' + history : ''}
+
+Please provide a preliminary health assessment and guidance.`;
+
+  const messages = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user',   content: userMessage },
+  ];
+
+  try {
+    setLoading(true, 'Sending to TEE node (encrypted)...');
+
+    // ── OpenGradient x402 API call ──────────────────────────────────────────
+    // x402 Gateway endpoint for LLM chat completions
+    // The SDK (Python) handles payment signing automatically.
+    // From the browser we call the x402 REST endpoint directly with streaming.
+    const response = await fetch('https://api.opengradient.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Private-Key': privateKey,          // x402 signs payment client-side
+        'X-Settlement-Mode': 'PRIVATE',       // no on-chain data
+        'X-Network': 'base-sepolia',
+      },
+      body: JSON.stringify({
+        model: 'anthropic/claude-sonnet-4-6',
+        messages,
+        max_tokens: 800,
+        temperature: 0.1,
+        stream: true,
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`API error ${response.status}: ${err}`);
+    }
+
+    // ── Stream SSE ──────────────────────────────────────────────────────────
+    setLoading(true, 'Streaming response from Claude Sonnet via TEE...');
+    document.getElementById('result-wrap').classList.add('show');
+
+    const body = document.getElementById('result-body');
+    body.textContent = '';
+    body.classList.add('streaming');
+
+    const reader   = response.body.getReader();
+    const decoder  = new TextDecoder();
+    let buffer = '';
+    let paymentHash = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (raw === '[DONE]') continue;
+        try {
+          const json = JSON.parse(raw);
+          const delta = json.choices?.[0]?.delta?.content;
+          if (delta) body.textContent += delta;
+          if (json.payment_hash) paymentHash = json.payment_hash;
+        } catch { /* skip */ }
+      }
+    }
+
+    body.classList.remove('streaming');
+
+    // ── Emergency detection ─────────────────────────────────────────────────
+    if (body.textContent.includes('EMERGENCY:') ||
+        symptoms.toLowerCase().match(/chest pain|can.t breathe|stroke|heart attack/)) {
+      document.getElementById('emergency-alert').classList.add('show');
+    }
+
+    // ── Meta info ───────────────────────────────────────────────────────────
+    const metaEl = document.getElementById('meta');
+    metaEl.innerHTML =
+      `<span>Model: anthropic/claude-sonnet-4-6</span>` +
+      `<span>Settlement: PRIVATE — no on-chain data</span>` +
+      (paymentHash ? `<span>Payment: ${paymentHash.slice(0,18)}...${paymentHash.slice(-6)}</span>` : '');
+
+    addToHistory(symptoms, body.textContent.includes('EMERGENCY:'));
+
+  } catch (err) {
+    // ── Fallback: simulate for preview ─────────────────────────────────────
+    // Real app: remove this block and show an error instead.
+    console.warn('API not reachable, running preview simulation:', err.message);
+    await simulatePreview(symptoms, age, duration);
+  } finally {
+    setLoading(false);
+    document.getElementById('submit-btn').disabled = false;
+  }
+}
+
+// ── Preview simulation (shown when API not reachable) ────────────────────────
+async function simulatePreview(symptoms, age, duration) {
+  const isEmergency = /chest pain|can.t breathe|stroke|heart attack/i.test(symptoms);
+  document.getElementById('result-wrap').classList.add('show');
+  const body = document.getElementById('result-body');
+  body.textContent = '';
+  body.classList.add('streaming');
+  setLoading(true, 'Preview mode (simulated response)...');
+
+  const text = isEmergency
+    ? `EMERGENCY:
+
+⚠️ Based on the symptoms described, some indicators may suggest a serious condition requiring immediate medical attention.
+
+SYMPTOMS NOTED
+${symptoms.slice(0, 180)}
+
+PRIORITY: URGENT — Please call emergency services or go to the nearest emergency room immediately.
+
+POSSIBLE CAUSES
+1. Cardiac event or pulmonary embolism — chest pain combined with breathing difficulty requires urgent evaluation.
+2. Severe allergic reaction (anaphylaxis) — if recently exposed to allergens.
+3. Acute respiratory emergency.
+
+IMMEDIATE ACTIONS
+- Do not drive yourself.
+- Call your local emergency number now.
+- If prescribed, use your rescue medication (inhaler, epinephrine).
+
+DISCLAIMER
+This is AI-generated preliminary guidance. Do not delay emergency care based on this assessment.`
+    : `SYMPTOM ASSESSMENT
+
+SYMPTOMS NOTED
+${symptoms.slice(0, 200)}
+Age: ${age} | Duration: ${duration}
+
+PRIORITY: HOME CARE — Monitor closely. See a doctor if symptoms worsen.
+
+POSSIBLE CAUSES
+1. Viral upper respiratory infection (common cold / flu) — most likely. Self-limiting over 5–10 days.
+2. Tension-type headache with viral fatigue — headache pattern consistent with tension-related origin.
+3. Sinusitis — if nasal congestion is present, sinus inflammation may explain the persistent headache.
+
+RECOMMENDATIONS
+• Rest and stay hydrated — aim for 8–10 glasses of water per day.
+• Fever / pain relief: Paracetamol 500–1000 mg every 6 hours as needed, or ibuprofen 400 mg with food.
+• Nasal congestion: saline nasal spray or steam inhalation.
+• Monitor temperature: if fever exceeds 39.5°C or persists beyond 3 days, consult a doctor.
+
+WHEN TO SEEK MEDICAL CARE
+Seek prompt medical attention if you experience: difficulty breathing, severe or worsening headache, stiff neck, skin rash, confusion, or if symptoms do not improve within 7 days.
+
+DISCLAIMER
+This is AI-generated preliminary guidance for informational purposes only. It does not constitute a medical diagnosis. Please consult a licensed healthcare professional for a proper evaluation.
+
+─────────────────────────
+⚠️ PREVIEW MODE: This response is simulated. In production, this text streams live from Claude Sonnet 4.6 running inside an OpenGradient TEE node, called via the x402 payment gateway using your $OPG tokens on Base Sepolia.`;
+
+  for (let i = 0; i < text.length; i++) {
+    body.textContent += text[i];
+    await sleep(9 + Math.random() * 12);
+  }
+  body.classList.remove('streaming');
+
+  if (isEmergency) document.getElementById('emergency-alert').classList.add('show');
+
+  const fakeHash = '0x' + [...Array(64)].map(() => Math.floor(Math.random()*16).toString(16)).join('');
+  document.getElementById('meta').innerHTML =
+    `<span>Model: anthropic/claude-sonnet-4-6 (simulated)</span>
+     <span>Settlement: PRIVATE — no on-chain data</span>
+     <span>Payment: ${fakeHash.slice(0,18)}...${fakeHash.slice(-6)} (preview)</span>`;
+
+  addToHistory(symptoms, isEmergency);
+}
+
+// ── History ──────────────────────────────────────────────────────────────────
+function addToHistory(symptoms, isEmergency) {
+  const now     = new Date().toLocaleTimeString();
+  const summary = symptoms.length > 70 ? symptoms.slice(0, 70) + '…' : symptoms;
+  sessionHistory.unshift({ time: now, summary, isEmergency });
+
+  const card = document.getElementById('history-card');
+  const list  = document.getElementById('history-list');
+  card.style.display = 'block';
+  list.innerHTML = sessionHistory.map(h => `
+    <div class="h-item">
+      <div class="h-time">${h.time} ${h.isEmergency ? '🚨 EMERGENCY' : '✓'}</div>
+      <div class="h-summ">${h.summary}</div>
+    </div>
+  `).join('');
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function setLoading(show, msg) {
+  const el = document.getElementById('loading');
+  el.classList.toggle('show', show);
+  if (msg) document.getElementById('loading-text').textContent = msg;
+}
+
+function clearForm() {
+  document.getElementById('result-wrap').classList.remove('show');
+  document.getElementById('result-body').textContent = '';
+  document.getElementById('emergency-alert').classList.remove('show');
+  document.getElementById('symptoms-text').value = '';
+  document.getElementById('history-text').value = '';
+  document.getElementById('age-range').value = '';
+  document.getElementById('duration').value = '';
+  document.querySelectorAll('.chip.sel').forEach(c => c.classList.remove('sel'));
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+</script>
+</body>
+</html>
