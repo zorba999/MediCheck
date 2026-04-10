@@ -1,5 +1,5 @@
 """
-MediCheck Backend — OpenGradient SDK
+MediCheck Backend — OpenGradient SDK v0.9.9+
 Private key stays server-side only. Frontend has zero access to it.
 
 Install:
@@ -12,15 +12,20 @@ Run:
 import asyncio
 import json
 import os
+import nest_asyncio
 from dotenv import load_dotenv
 
-load_dotenv()  # Charge les variables depuis .env
+load_dotenv()  # Load variables from .env
+
 import opengradient as og
-from flask import Flask, Response, stream_with_context, jsonify
+from flask import Flask, Response, stream_with_context, jsonify, request
 from flask_cors import CORS
 
+# Allow nested event loops (needed for sync streaming in Flask)
+nest_asyncio.apply()
+
 # ─── Config ────────────────────────────────────────────────────────────────
-PRIVATE_KEY = os.environ.get("OG_PRIVATE_KEY")  # Use .get() to prevent boot crash on Vercel
+PRIVATE_KEY = os.environ.get("OG_PRIVATE_KEY")  # Use .get() to prevent boot crash
 
 MODEL = og.TEE_LLM.CLAUDE_SONNET_4_6
 
@@ -36,20 +41,20 @@ Format with clear sections using plain text and line breaks (no markdown).
 Important: if symptoms suggest a life-threatening emergency (chest pain + shortness of breath, stroke symptoms, severe allergic reaction), START your response with "EMERGENCY:" on its own line."""
 
 # ─── Init SDK ───────────────────────────────────────────────────────────────
-print("Initializing OpenGradient SDK...")
+print("Initializing OpenGradient SDK v0.9.9...")
 llm = None
 if PRIVATE_KEY:
     try:
         llm = og.LLM(private_key=PRIVATE_KEY)
         print("SDK Initialized successfully.")
-        # Note for Vercel: We remove the `ensure_opg_approval` blocking call from here 
-        # so it doesn't cause a lambda timeout on Vercel during cold boot!
     except Exception as e:
         print(f"Error loading SDK: {e}")
+else:
+    print("WARNING: OG_PRIVATE_KEY not set. Assessment endpoint will fail.")
 
 # ─── Flask App ──────────────────────────────────────────────────────────────
 app = Flask(__name__, static_folder=".", static_url_path="")
-CORS(app)  # Allow frontend (HTML file) to call this backend
+CORS(app)
 
 
 @app.route("/")
@@ -60,21 +65,19 @@ def index():
 
 @app.route("/api/assess", methods=["POST"])
 def assess():
-    try:
-        if not llm:
-            return jsonify({"error": "PRIVATE_KEY is missing or invalid on Vercel environment!"}), 500
+    if not llm:
+        return jsonify({"error": "OG_PRIVATE_KEY is missing. Set it in .env or Vercel Environment Variables."}), 500
 
-        from flask import request
-        data = request.get_json()
-        if not data or not data.get("symptoms"):
-            return jsonify({"error": "Missing symptoms field"}), 400
+    data = request.get_json()
+    if not data or not data.get("symptoms"):
+        return jsonify({"error": "Missing symptoms field"}), 400
 
-        symptoms = data.get("symptoms", "")
-        age = data.get("age", "Not specified")
-        duration = data.get("duration", "Not specified")
-        history = data.get("history", "")
+    symptoms = data.get("symptoms", "")
+    age      = data.get("age", "Not specified")
+    duration = data.get("duration", "Not specified")
+    history  = data.get("history", "")
 
-        user_message = f"""Patient information:
+    user_message = f"""Patient information:
 - Age range: {age}
 - Duration of symptoms: {duration}
 - Symptoms: {symptoms}
@@ -82,57 +85,67 @@ def assess():
 
 Please provide a preliminary health assessment and guidance."""
 
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user",   "content": user_message},
-        ]
-    except Exception as e:
-        import traceback
-        return str(traceback.format_exc()), 500
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user",   "content": user_message},
+    ]
 
     def generate():
-        """Stream SSE chunks to the client."""
+        """Stream SSE chunks — compatible with SDK v0.9.9 StreamChunk API."""
+        async def run():
+            try:
+                # SDK v0.9.9: stream=True returns AsyncGenerator[StreamChunk, None]
+                stream = await llm.chat(
+                    model=MODEL,
+                    messages=messages,
+                    max_tokens=1000,
+                    temperature=0.1,
+                    x402_settlement_mode=og.x402SettlementMode.INDIVIDUAL_FULL,
+                    stream=True,
+                )
+
+                final_chunk = None
+                async for chunk in stream:
+                    # Each chunk has chunk.choices[0].delta.content
+                    if chunk.choices:
+                        content = chunk.choices[0].delta.content
+                        if content:
+                            yield json.dumps({"text": content}) + "\n\n"
+
+                    # Final chunk carries TEE metadata
+                    if chunk.is_final:
+                        final_chunk = chunk
+
+                # Send done event with TEE metadata if available
+                done_meta = {
+                    "done": True,
+                    "settlement": "INDIVIDUAL_FULL",
+                    "model": str(MODEL),
+                }
+                if final_chunk:
+                    if final_chunk.tee_id:
+                        done_meta["tee_id"] = final_chunk.tee_id
+                    if final_chunk.tee_timestamp:
+                        done_meta["tee_timestamp"] = final_chunk.tee_timestamp
+                    if final_chunk.tee_signature:
+                        done_meta["tee_signature"] = final_chunk.tee_signature[:40] + "..."
+
+                yield json.dumps(done_meta) + "\n\n"
+
+            except Exception as e:
+                yield json.dumps({"text": f"\n\n[Backend Error]: {str(e)}"}) + "\n\n"
+
+        async def collect():
+            results = []
+            async for item in run():
+                results.append(item)
+            return results
+
         loop = asyncio.new_event_loop()
-
-        async def run_stream():
-            stream = await llm.chat(
-                model=MODEL,
-                messages=messages,
-                max_tokens=800,
-                temperature=0.1,
-                x402_settlement_mode=og.x402SettlementMode.INDIVIDUAL_FULL,
-                stream=True,
-            )
-            async for chunk in stream:
-                content = chunk.choices[0].delta.content
-                if content:
-                    yield content
-
         try:
-            async def stream_to_sync():
-                full_text = ""
-                try:
-                    async for text_chunk in run_stream():
-                        full_text += text_chunk
-                        payload = json.dumps({"text": text_chunk})
-                        yield f"data: {payload}\n\n"
-
-                    done_payload = json.dumps({
-                        "done": True,
-                        "settlement": "INDIVIDUAL_FULL",
-                        "model": str(MODEL),
-                    })
-                    yield f"data: {done_payload}\n\n"
-                except Exception as e:
-                    yield f"data: {json.dumps({'text': f'\\n\\n[Backend Error]: {str(e)}'})}\n\n"
-
-            gen = stream_to_sync()
-            while True:
-                try:
-                    chunk = loop.run_until_complete(gen.__anext__())
-                    yield chunk
-                except StopAsyncIteration:
-                    break
+            items = loop.run_until_complete(collect())
+            for item in items:
+                yield f"data: {item}"
         finally:
             loop.close()
 
@@ -151,6 +164,7 @@ def status():
     """Health check — frontend calls this to confirm backend is up."""
     return jsonify({
         "status": "ok",
+        "sdk_version": "0.9.9",
         "model": str(MODEL),
         "settlement": "INDIVIDUAL_FULL",
         "network": "Base Sepolia",
@@ -158,5 +172,4 @@ def status():
 
 
 if __name__ == "__main__":
-    # Development server — use gunicorn for production
     app.run(host="0.0.0.0", port=5000, debug=True)

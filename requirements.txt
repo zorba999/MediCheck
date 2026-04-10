@@ -1,4 +1,4 @@
-opengradient
+opengradient==0.9.9
 flask
 flask-cors
 python-dotenv
